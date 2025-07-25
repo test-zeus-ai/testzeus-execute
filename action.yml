@@ -1,0 +1,89 @@
+name: 'TestZeus Execute'
+description: 'Generate report from TestZeus using Test IDs'
+
+inputs:
+  test_ids_file:
+    description: 'File containing test IDs'
+    required: true
+  email:
+    description: 'TestZeus login email'
+    required: true
+  password:
+    description: 'TestZeus login password'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install TestZeus
+      shell: bash
+      run: |
+        echo "Installing TestZeus CLI..."
+        poetry add testzeus-cli jq
+
+    - name: Validate Test IDs File
+      shell: bash
+      run: |
+        FILE="${{ inputs.test_ids_file }}"
+
+        echo "🔍 Validating test IDs file: $FILE"
+
+        if [[ ! -f "$FILE" ]]; then
+          echo "❌ File not found: $FILE"
+          exit 1
+        fi
+
+        if ! jq empty "$FILE" 2>/dev/null; then
+          echo "❌ Invalid JSON in file: $FILE"
+          exit 1
+        fi
+
+        if [[ $(jq '.test_ids | type' "$FILE") != "\"array\"" ]]; then
+          echo "❌ 'test_ids' must be an array"
+          exit 1
+        fi
+
+        if [[ $(jq '.execution_mode | type' "$FILE") != "\"string\"" ]]; then
+          echo "❌ 'execution_mode' must be a string"
+          exit 1
+        fi
+
+        echo "✅ Test ID file validation passed."
+
+    - name: Login to TestZeus
+      shell: bash
+      run: |
+        echo "🔐 Logging into TestZeus..."
+        LOGIN_OUTPUT=$(poetry run testzeus login --email "${{ inputs.email }}" --password "${{ inputs.password }}" 2>&1)
+
+        if echo "$LOGIN_OUTPUT" | grep -q "Login failed"; then
+          echo "❌ Login failed: aborting action."
+          exit 1
+        fi
+
+        echo "✅ Successfully logged into TestZeus."
+
+    - name: Extract Test IDs and Mode
+      shell: bash
+      run: |
+        FILE="${{ inputs.test_ids_file }}"
+        TEST_IDS=$(jq -r '.test_ids | join(",")' "$FILE")
+        EXECUTION_MODE=$(jq -r '.execution_mode' "$FILE")
+
+        echo "TEST_IDS=$TEST_IDS" >> $GITHUB_ENV
+        echo "EXECUTION_MODE=$EXECUTION_MODE" >> $GITHUB_ENV
+
+        echo "🧪 Extracted test IDs: $TEST_IDS"
+        echo "⚙️ Execution mode: $EXECUTION_MODE"
+
+    - name: Generate CTRF Report
+      shell: bash
+      run: |
+        echo "📊 Generating CTRF report..."
+        poetry run testzeus --format json test-runs run-multiple-tests-and-generate-ctrf $TEST_IDS --mode $EXECUTION_MODE --interval 30 --filename ctrf_report.json
+        if [[ -f "ctrf_report.json" ]]; then
+          echo "✅ Report generated as ctrf_report.json"
+        else
+          echo "❌ Report generation failed: aborting action."
+          exit 1
+        fi
