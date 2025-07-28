@@ -38,6 +38,8 @@ Your **`test_ids_file`** *must* follow this shape:
 
 ## 🚀 Quick Start
 
+First Add pyproject.toml file using `poetry init --no-interaction` to your repo then replace the python version to ">=3.11,<3.14" using `sed -i "s/>=3.11/>=3.11,<3.14/" pyproject.toml`
+
 ```yaml
 name: "Run TestZeus Suite"
 
@@ -49,6 +51,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run image
+        uses: abatilo/actions-poetry@v3
+
+      - name: Install dependencies
+        run: |
+          poetry install --no-root
 
       - name: Execute TestZeus Tests
         uses: test-zeus-ai/testzeus-execute@v1
@@ -64,6 +78,8 @@ jobs:
           report-path: "ctrf_report.json"
           template-path: "templates/testzeus-report.hbs"
           custom-report: true
+          artifact-name: 'ctrf_report'
+          upload-artifact: true
         if: always()
 ```
 
@@ -73,6 +89,10 @@ jobs:
 
 Copy the template below into your repo (for example inside `templates/testzeus-report.hbs`) **or** create your own custom template.  
 Then reference the file in your workflow step with the `template-path` input (see the *Publish Test Report* example above).
+
+To create you own custom template then refer the following repos:
+- [build custom CTRF template using ctrf-io repo](https://github.com/ctrf-io/github-test-reporter/tree/v1/)
+- [Learn how to write handlebar for github actions](https://handlebarsjs.com/guide/)
 
 ![Test Results Summary](assets/test-results-summary.png)
 
